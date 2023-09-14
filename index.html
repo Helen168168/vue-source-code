@@ -12,6 +12,7 @@
 
 //存储副作用的函数
 const bucket = new WeakMap();
+
 // 全局变量存储被注册的副作用函数
 let activeEffect;
 const effectStack = [];
@@ -62,7 +63,7 @@ function trigger(target, key) {
     const depsMap = bucket.get(target)
     if(!depsMap) return;
     const effects = depsMap.get(key);
-    const effectToRun = new Set(effects);
+    const effectToRun = new Set();
     effects && effects.forEach(effectFn => {
         if(effectFn !== activeEffect) {
             effectToRun.add(effectFn)
@@ -129,31 +130,35 @@ function effect(fn, options={}) {
 }
 
 function computed(getter) {
-    let value; //用来缓存上一次计算的值
+    //用来缓存上一次计算的值
+    let value; 
     //dirty标志，用来标识是否需要重新计算值，为true则意味着需要重新计算
     let dirty = true;
 
     //把getter作为副作用函数
     const effectFn = effect(getter, {
         lazy: true,
-        scheduler() {
+        scheduler(fn) {
+            //每次调度时，将副作用函数添加到jobQueue队列中
+            jobQueue.add(fn);
+            //调用flush.job刷新队列
+            flushJob()
             dirty = true
-        }
+        },
     })
+
     //当读取value时才执行effectFn
     const obj = {
         get value() {
             if(dirty) {
-                value = effectFn();
                 //将dirty设置为false，下一次访问直接使用缓存到value中的值
+                value = effectFn();
             }
             return value;
         }
     }
     return obj;
 }
-
-
 
 // setTimeout(() => {
 //     obj.foo = 'hello world3';

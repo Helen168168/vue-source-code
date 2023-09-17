@@ -12,7 +12,7 @@
 //存储副作用的函数,key为监听的现象
 const bucket = new WeakMap();
 
-// 全局变量存储被注册的副作用函数
+// 存储被注册的副作用函数
 let activeEffect;
 const effectStack = [];
 //定义一个任务队列
@@ -23,7 +23,7 @@ const p = Promise.resolve();
 let isFlushing = false;
 
 //原始数据
-const data = {ok: false,  text: 'hello world', foo: 1, bar: 4 };
+const data = {ok: true,  text: 'hello world', foo: 1, bar: 4 };
 
 //原始数据的代理
 const obj = new Proxy(data, {
@@ -132,7 +132,7 @@ function effect(fn, options={}) {
 
 function computed(getter) {
     //用来缓存上一次计算的值
-    let value; 
+    let computedVal; 
     //dirty标志，用来标识是否需要重新计算值，为true则意味着需要重新计算
     let dirty = true;
 
@@ -151,18 +151,20 @@ function computed(getter) {
             }
         },
     })
+
     //当读取value时才执行effectFn
     const obj = {
         get value() {
+            debugger
             if (dirty) {
-                value = effectFn()
+                computedVal = effectFn()
                 dirty = false
             }
             if(activeEffect) {
                 // 当读取value时，手动调用track函数进行追踪
                 track(obj, 'value')
             }
-            return value
+            return computedVal
         }
     }
     return obj;
@@ -177,7 +179,8 @@ effect(() => {
     console.log(sumRes.value)
 })
 
-obj.foo++
+obj.foo++;
+
 
 </script>
 

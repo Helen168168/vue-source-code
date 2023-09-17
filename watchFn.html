@@ -130,57 +130,45 @@ function effect(fn, options={}) {
     }
 }
 
-function computed(getter) {
-    //用来缓存上一次计算的值
-    let computedVal; 
-    //dirty标志，用来标识是否需要重新计算值，为true则意味着需要重新计算
-    let dirty = true;
-
-    //把getter作为副作用函数
-    const effectFn = effect(getter, {
-        lazy: true,
-        scheduler(fn) {
-            //每次调度时，将副作用函数添加到jobQueue队列中
-            jobQueue.add(fn);
-            //调用flush.job刷新队列
-            flushJob();
-            if(!dirty) {
-                dirty = true;
-                //当计算属性依赖的响应式数据变化时，手动调用trigger函数触发响应
-                trigger(obj, 'value');
-            }
-        },
-    })
-
-    //当读取value时才执行effectFn
-    const obj = {
-        get value() {
-            if (dirty) {
-                computedVal = effectFn()
-                dirty = false
-            }
-            if(activeEffect) {
-                // 当读取value时，手动调用track函数进行追踪
-                track(obj, 'value')
-            }
-            return computedVal
-        }
+function watch(source, cb) {
+    let getter;
+    let newVal, oldVal;
+    if(typeof source === 'function') {
+        getter = source;
+    } else {
+        getter = () => traverse(source);
     }
-    return obj;
+    const effectFn = effect(
+        () => getter(),
+        {
+            lazy: true,
+            scheduler() {
+                newVal = effectFn()
+                //数据发生变化时再调用cb
+                cb(newVal, oldVal)
+                oldVal = newVal;
+            }
+        }
+    )
+    oldVal = effectFn();
 }
 
-/**模拟一个计算属性*/
-const sumRes = computed(() => obj.foo + obj.bar);
+function traverse(value, seen = new Set()) {
+    //如果读取数据不是对象或者已经读取过了什么的不做
+    if(typeof value !== 'object' || value === null || seen.has(value)) return;
+    //将数据添加到seen中，代表遍历地读取过了，避免死循环
+    seen.add(value);
+    for(const k in value) {
+        traverse(value[k], seen)
+    }
+    return value;
+}
 
-console.log('-----------------------------------')
-effect(() => {
-    console.log('另一个effect调用computed计算属性')
-    console.log(sumRes.value)
+watch(() => obj.foo, (newVal, oldVal) => {
+  console.log('数据变化了');
 })
 
-obj.foo++;
-
-
+obj.foo++
 </script>
 
 </html>

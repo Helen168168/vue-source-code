@@ -12,11 +12,9 @@
     ADD: 'ADD',
     DELETE: 'DELETE'
   }
-
   //存储副作用的函数,key为监听的现象
   const bucket = new WeakMap();
   const ITERATE_KEY = Symbol();
-
   // 存储被注册的副作用函数
   let activeEffect;
   const effectStack = [];
@@ -27,56 +25,60 @@
   //一个标志代表是否正在刷新队列
   let isFlushing = false;
   
-  //原始数据
-  const data = {
-    ok: true,  
-    text: 'hello world', 
-    foo: 1, 
-    get bar() {
-      return this.foo
-    }
- };
-  
-  //原始数据的代理
-  const obj = new Proxy(data, {
-    //拦截读取操作
-    get(target, key, receiver) {
-      track(target, key)
-      return Reflect.get(target, key, receiver);
-    },
+  const obj = {};
+  const proto = { bar: 1 }
+  const child = reactive(obj);
+  const parent = reactive(proto)
 
-    //拦截设置
-    set(target, key, newVal, receiver) {
-      const oldVal = target[key]
-      const type = Object.prototype.hasOwnProperty.call(target, key) ? TriggerType['SET'] : TriggerType['ADD']
-      //设置属性值
-      const res = Reflect.set(target, key, newVal, receiver)
-      //比较新旧值不相等时才触发函数, (oldVal === oldVal || newVal === newVal)防止初始值为NaN
-      if(oldVal !== newVal && (oldVal === oldVal || newVal === newVal)) {
-        trigger(target, key, type)
+  // 使用parent作为child的原型
+  Object.setPrototypeOf(child, parent)
+
+  function reactive(obj) {
+      return new Proxy(obj, {
+        //拦截读取操作
+        get(target, key, receiver) {
+          //代理对象可以通过raw属性访问原始数据
+          if(key === 'raw') {
+            return target
+          }
+          track(target, key)
+          return Reflect.get(target, key, receiver);
+        },
+        //拦截设置
+        set(target, key, newVal, receiver) {
+          const oldVal = target[key]
+          const type = Object.prototype.hasOwnProperty.call(target, key) ? TriggerType['SET'] : TriggerType['ADD']
+          //设置属性值
+          const res = Reflect.set(target, key, newVal, receiver)
+          if(target === receiver.raw) {
+            //比较新旧值不相等时才触发函数, (oldVal === oldVal || newVal === newVal)防止初始值为NaN
+            if(oldVal !== newVal && (oldVal === oldVal || newVal === newVal)) {
+              trigger(target, key, type)
+            }
+          } 
+          return res
+        },
+        has(target, key) { //在判断代理对象是否拥有某个属性时触发该操作
+          track(target, key)
+          return Reflect.has(target, key);
+        },
+        ownKeys(target) { //在获取代理对象的所有属性键时触发该操作
+          //将副作用函数与ITERATE_KEY关联
+          track(target, ITERATE_KEY)
+          return Reflect.ownKeys(target)
+        },
+        deleteProperty(target, key) { //删除对象里面的属性时调用
+        //检查被操作的属性是对象自己的属性吗？
+        const hadKey = Object.prototype.hasOwnProperty.call(target, key)
+        const res = Reflect.deleteProperty(target, key)
+        if(res && hadKey) {
+          trigger(target, key, TriggerType['DELETE']);
+        }
+        return res
       }
-      return res
-    },
-    has(target, key) { //在判断代理对象是否拥有某个属性时触发该操作
-      track(target, key)
-      return Reflect.has(target, key);
-    },
-    ownKeys(target) { //在获取代理对象的所有属性键时触发该操作
-      //将副作用函数与ITERATE_KEY关联
-      track(target, ITERATE_KEY)
-      return Reflect.ownKeys(target)
-    },
-    deleteProperty(target, key) { //删除对象里面的属性时调用
-      //检查被操作的属性是对象自己的属性吗？
-      const hadKey = Object.prototype.hasOwnProperty.call(target, key)
-      const res = Reflect.deleteProperty(target, key)
-      if(res && hadKey) {
-        trigger(target, key, TriggerType['DELETE']);
-      }
-      return res
-    }
-  })
-  
+      })
+  }
+ 
   function track(target, key) {
       //将副作用函数activeEffect添加到存储副作用函数中
       if(!activeEffect) return target[key]
@@ -179,16 +181,12 @@
           return effectFn;
       }
   }
- 
 
   effect(() => {
-    for(const key in obj) {
-      console.log(key);
-    }
+    console.log(child.bar);
   })
 
-  obj.foo = 5 * 12;
-
+  child.bar = 2;
 
   </script>
 

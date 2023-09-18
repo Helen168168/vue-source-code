@@ -130,7 +130,7 @@ function effect(fn, options={}) {
     }
 }
 
-function watch(source, cb) {
+function watch(source, cb, options = {}) {
     let getter;
     let newVal, oldVal;
     if(typeof source === 'function') {
@@ -138,19 +138,32 @@ function watch(source, cb) {
     } else {
         getter = () => traverse(source);
     }
+    const job = () => {
+        newVal = effectFn()
+        //数据发生变化时再调用cb
+        cb(newVal, oldVal)
+        oldVal = newVal;
+    }
     const effectFn = effect(
         () => getter(),
         {
             lazy: true,
-            scheduler() {
-                newVal = effectFn()
-                //数据发生变化时再调用cb
-                cb(newVal, oldVal)
-                oldVal = newVal;
+            scheduler: () => {
+                if(options.flush === 'post') {
+                    Promise.resolve().then(job)
+                } else {
+                    job()
+                }
             }
         }
     )
-    oldVal = effectFn();
+
+    //当immediate为true时立即执行job，从而触发回调执行
+    if(options.immediate) {
+        job()
+    } else {
+        oldVal = effectFn();
+    }  
 }
 
 function traverse(value, seen = new Set()) {
@@ -166,6 +179,8 @@ function traverse(value, seen = new Set()) {
 
 watch(() => obj.foo, (newVal, oldVal) => {
   console.log('数据变化了');
+}, {
+    immediate: true
 })
 
 obj.foo++

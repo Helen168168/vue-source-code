@@ -30,8 +30,13 @@
       bar: 1
     }
   })
-
-  function reactive(obj, isShallow = false) {
+  function readonly(obj) {
+    return reactive(obj, false, true)
+  }
+  function shallowReadonly(obj) {
+    return reactive(obj, true, true)
+  }
+  function reactive(obj, isShallow = false, isReadonly = false) {
       return new Proxy(obj, {
         //拦截读取操作
         get(target, key, receiver) {
@@ -39,19 +44,26 @@
           if(key === 'raw') {
             return target
           }
-          track(target, key)
+          //如果属性是只读的没必要建立追踪
+          if(!isReadonly) {
+            track(target, key)
+          }
           const res = Reflect.get(target, key, receiver)
           if(isShallow) {
             return res
           }
           if(typeof res === 'object' && res !== null) {
             //调用reactive将结果包装成响应式数据并返回
-            return reactive(res)
+            return isReadonly ? readonly(res) : reactive(res)
           }
           return res
         },
         //拦截设置
         set(target, key, newVal, receiver) {
+          if(isReadonly) {
+            console.warn(`属性${key}是只读的`)
+            return true
+          }
           const oldVal = target[key]
           const type = Object.prototype.hasOwnProperty.call(target, key) ? TriggerType['SET'] : TriggerType['ADD']
           //设置属性值
@@ -74,6 +86,10 @@
           return Reflect.ownKeys(target)
         },
         deleteProperty(target, key) { //删除对象里面的属性时调用
+          if(isReadonly) {
+            console.warn(`属性${key}是只读的`)
+            return true
+          }
         //检查被操作的属性是对象自己的属性吗？
         const hadKey = Object.prototype.hasOwnProperty.call(target, key)
         const res = Reflect.deleteProperty(target, key)
